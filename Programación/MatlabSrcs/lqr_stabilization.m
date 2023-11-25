@@ -1,0 +1,149 @@
+%% LQG Design for Quadcopter 
+
+% Final Degree Project
+% UNSA
+% Electronic Engineeering
+% Group
+% -------------
+
+%% Parameters
+% Linearization
+    g=9.81;
+    b=3.25e-5;
+    d=7.5e-7;
+    l=0.25;
+    m=0.65;
+    ix=7.5e-3;
+    iy=7.5e-3;
+    iz=1.3e-2;
+A = [...
+    0 0 0 1 0 0 0 0 0 0 0 0 ;...
+    0 0 0 0 1 0 0 0 0 0 0 0 ;...
+    0 0 0 0 0 1 0 0 0 0 0 0 ;...
+    0 0 0 0 0 0 0 0 0 0 0 0 ;...
+    0 0 0 0 0 0 0 0 0 0 0 0 ;...
+    0 0 0 0 0 0 0 0 0 0 0 0 ;...
+    0 -g 0 0 0 0 0 0 0 0 0 0 ;...
+    g 0 0 0 0 0 0 0 0 0 0 0 ;...
+    0 0 0 0 0 0 0 0 0 0 0 0 ;...
+    0 0 0 0 0 0 1 0 0 0 0 0 ;...
+    0 0 0 0 0 0 0 1 0 0 0 0 ;...
+    0 0 0 0 0 0 0 0 1 0 0 0 ];
+B = [...
+    0 0 0 0;...
+    0 0 0 0;...
+    0 0 0 0;...
+    0 1/ix 0 0;...
+    0 0 1/iy 0;...
+    0 0 0 1/iz;...
+    0 0 0 0;...
+    0 0 0 0;...
+    1/m 0 0 0;...
+    0 0 0 0;...
+    0 0 0 0;...
+    0 0 0 0];
+C = [0 0 0 0 0 0 0 0 0 1 0 0;...
+     0 0 0 0 0 0 0 0 0 0 1 0;...
+     0 0 0 0 0 0 0 0 0 0 0 1;...
+     0 0 0 0 0 0 0 0 0 0 0 0];%...
+     %0 0 0 0 0 0 0 0 0 0 0 0;...
+     %0 0 0 0 0 0 0 0 1 0 0 0]; 
+C = eye(12,12);
+D = zeros(12,4);
+Q = C'*C;
+G = ss(A,B,C,D);
+G.InputName = {'U1','U2','U3','U4'};
+
+G.OutputName = {'x','y','z','vx','vy','vz','roll','phi','yaw','vroll','vphi','vyaw'};
+
+sys = minreal(G);
+Qn = sys.C'*sys.C;
+R = diag([1 1 1 1]);
+[K,S,e] = lqr(sys,Qn,R);
+Ac1 = sys.A - sys.B*K;
+sysss = ss(Ac1,sys.B,sys.C,sys.D);
+%% Simulation LTI response
+t= 0:0.01:20;
+u1 = [0 ones(1,2000)];
+u2 = [0 ones(1,2000)];  
+u3 = [0 ones(1,2000)];
+u4 = [0 ones(1,2000)];
+lsim(sysss, [u1;u2;u3;u4],t);
+
+
+
+
+
+
+%% Simulation Non-linear Model
+%% Model - EDO
+% Inputs
+% u1=b*((w1^2)+(w2^2)+(w3^2)+(w4^2));
+% u2=b*l*((w3^2)-(w1^2));
+% u3=b*l*((w4^2)-(w2^2));
+% u4=d*((w2^2)+(w4^2)-(w1^2)-(w3^2));
+% % EDO
+% xdd=(-u1/m)*(sin(phi)*sin(psi)+cos(phi)*cos(psi)*sin(theta));%ok
+% ydd=(-u1/m)*(cos(phi)*sin(psi)*sin(theta)-cos(psi)*sin(phi)); %
+% zdd=g-((u1/m)*(cos(phi)*cos(theta)));
+% phidd  =(((iy-iz)/ix)*thetad*psid)+(u2/ix);
+% thetadd=(((iz-ix)/iy)*phid*psid)+(u3/iy);
+% psidd  =(((ix-iy)/iz)*phid*thetad)+(u4/iz);
+options1=odeset('RelTol',0.001);
+to = 0;  % start time
+tf = 20;  % end time 
+t = linspace(to,tf,200);
+xo = [0;0;0;0;0;0;0;0;0;0;0;0];
+[t,x]= ode23(@(t,x)nonlinear(t,x),t,xo,options1);
+figure(1)
+title("Position XYZ")
+    plot(t,x(:,1));
+    hold on
+    plot(t,x(:,3));
+    plot(t,x(:,5));
+    hold off
+function [xdot] = nonlinear(t,x)
+    g=9.81;
+    b=3.25e-5;
+    d=7.5e-7;
+    l=0.25;
+    m=0.65;
+    ix=7.5e-3;
+    iy=7.5e-3;
+    iz=1.3e-2;
+    w1 = 250; w2 = 250; w3 = 250; w4 =250;
+    u1=b*((w1^2)+(w2^2)+(w3^2)+(w4^2));
+    u2=b*l*((w3^2)-(w1^2)); 
+    u3=b*l*((w4^2)-(w2^2));
+    u4=d*((w2^2)+(w4^2)-(w1^2)-(w3^2));
+    % x1 = x; x2= xd; x3 = y; x4=yd; x5= z; x6=zd; 
+    % x7 = phi; x8= phid; x9 = theta; x10=thetad; x11= psi; x12=psid; 
+    
+    xdot = [x(2);...
+           (u1/m)*(sin(x(7))*sin(x(11))+cos(x(7))*cos(x(11))*sin(x(9)));...
+           x(4);...
+           (u1/m)*(cos(x(7))*sin(x(11))*sin(x(9))-cos(x(11))*sin(x(7)));...
+           x(6);...
+           -g+((u1/m)*(cos(x(7))*cos(x(9))));...
+           x(8);...
+           (((iy-iz)/ix)*x(10)*x(12))+(u2/ix);...
+           x(10);...
+           (((iz-ix)/iy)*x(8)*x(12))+(u3/iy);...
+           x(12);...
+           (((ix-iy)/iz)*x(8)*x(10))+(u4/iz)];
+       
+end
+
+
+
+
+%% Control Design
+
+% Kallman Filter
+
+% LQR
+
+
+%% Simulation
+% On Linearized Model
+% On Non-linear model
